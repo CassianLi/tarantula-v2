@@ -22,7 +22,17 @@ func consumeHandler(msg string) {
 	start := time.Now()
 	var category models.CategoryInfoRequest
 	// 将 JSON 字符串转换为 Go 类型的实例
+	// 先尝试直接解析，如果失败则尝试处理转义的 JSON 字符串
 	err := json.Unmarshal([]byte(msg), &category)
+	if err != nil {
+		log.Println("Warning: unmarshalling message, include double quotes, try to process escaped JSON string, err: ", err, "msg: ", msg)
+		// 尝试处理包含转义符的 JSON 字符串（双重编码的情况）
+		var jsonStr string
+		if err2 := json.Unmarshal([]byte(msg), &jsonStr); err2 == nil && jsonStr != "" {
+			// 如果成功解析为字符串，再解析这个字符串
+			err = json.Unmarshal([]byte(jsonStr), &category)
+		}
+	}
 	if err != nil || category.Country == "" || category.ProductNo == "" {
 		fmt.Println("Error unmarshalling message, err: ", err, category)
 		return
