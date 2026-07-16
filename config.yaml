@@ -5,6 +5,8 @@ global-context: true
 
 # 是否保存截图到本地
 save-screenshot-on-disk: true
+# 本地截图目录（save-screenshot-on-disk=true 时生效；空则当前目录）
+screenshot-local-path: "tmp/screenshot/"
 
 # ossutil credentials and bucket
 oss:
@@ -12,9 +14,10 @@ oss:
   access-key-id: ""
   access-key-secret: ""
   bucket: "bucketName"
-  # path
-  path: ""
+  # bucket 内对象前缀，如 tmp/screenshot/foo.png；空则上传到 bucket 根
+  path: "tmp/screenshot/"
 
+# Deprecated: Amazon 功能已迁移至其他项目，以下配置保留仅供参考，不再使用。
 amazon:
   # Amazon product details link
   urls:
@@ -27,12 +30,19 @@ amazon:
   screenshot-height: 1080
 
 ebay:
+  # 默认链接模板；未配置 ebay.urls.{country} 时按 country 自动生成，如 PL -> ebay.pl
   url: https://www.ebay.de/itm/ASIN
-  price-selectors: "#mainContent div.x-price-primary"
+  # urls:
+  #   de: https://www.ebay.de/itm/ASIN
+  #   pl: https://www.ebay.pl/itm/ASIN
+  # 页面就绪 / 下载 HTML；按逗号逐个尝试，优先含价格节点的片段
+  content-selector: "#mainContent,div.x-vi-evo-main-container__top-panel,#CenterPanel"
+  price-selectors: "div.x-price-primary,#mainContent div.x-price-primary"
+  price-approx-selector: "div.x-price-approx,#mainContent div.x-price-approx"
   # ebay 图片需要高一些，否则会被相似商品遮挡
   screenshot-height: 1680
   # 截图选择器，用于截图时，只截图商品信息区域; 多个选择器用逗号分隔
-  screenshot-selector: "#CenterPanel,div.x-vi-evo-main-container__top-panel"
+  screenshot-selector: "div.x-vi-evo-main-container__top-panel,#CenterPanel,#mainContent"
 
 mq:
   consumer:

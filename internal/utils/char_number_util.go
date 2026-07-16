@@ -5,7 +5,24 @@ import (
 	"log"
 	"regexp"
 	"strconv"
+	"strings"
 )
+
+var localizedPriceRE = regexp.MustCompile(`(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2})`)
+
+// ParseLocalizedPrice 从 eBay 价格文本解析数值（支持 56,99 / 1.459,19 / 56.99）。
+func ParseLocalizedPrice(text string) (float64, error) {
+	text = strings.TrimSpace(text)
+	m := localizedPriceRE.FindString(text)
+	if m == "" {
+		return 0, fmt.Errorf("no price number in %q", text)
+	}
+	if strings.Contains(m, ",") {
+		m = strings.ReplaceAll(m, ".", "")
+		m = strings.ReplaceAll(m, ",", ".")
+	}
+	return strconv.ParseFloat(m, 64)
+}
 
 // GetFloat64sFromString 获取字符串中的数字
 func GetFloat64sFromString(str string) []float64 {

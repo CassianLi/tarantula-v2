@@ -12,13 +12,13 @@ gen
 *test.go
 *pro.yaml
 
-# goreleaser config
-.goreleaser.yml
 frpc.ini
-.goreleaser.yaml
 go.sum
 
 dist
 
 *.png
 
+test-json.txt
+
+tmp/

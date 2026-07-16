@@ -13,11 +13,10 @@ func NewCategoryService(cat models.CategoryInfoRequest) CategoryServiceImpl {
 	fmt.Println("debug:", viper.GetBool("debug"))
 	channel := cat.SalesChannel
 	switch channel {
-	// tarantula2 不再提供Amazon的获取方式，采用tarantula3 通过亚马逊计算器页面获取商品费率信息
 	case "amazon":
-		return &AmazonCategory{
-			Category: cat,
-		}
+		// Deprecated: Amazon 功能已迁移至其他项目，本工程仅支持 eBay。
+		log.Println("Deprecated: channel=amazon 已弃用，请使用独立的 Amazon 项目")
+		return nil
 	case "ebay":
 		return &EbayCategory{
 			Category: cat,

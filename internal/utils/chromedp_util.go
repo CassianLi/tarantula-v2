@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -77,19 +78,15 @@ func Navigate(ctx context.Context, url string) error {
 	return chromedp.Run(ctx, chromedp.Navigate(url))
 }
 
-// NavigateAndWait 打开URL,等待selector元素加载完成
+// NavigateAndWait 打开 URL，导航完成后再开始计时等待 selector 可见。
+// selector 支持 CSS 多选（逗号分隔），任一匹配即成功。
 func NavigateAndWait(ctx context.Context, url string, selector string, timeout time.Duration) error {
-	// 创建带超时的上下文
-	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
-	defer waitCancel()
-
-	// navigate to the URL
-	err := chromedp.Run(ctx, chromedp.Navigate(url))
-	if err != nil {
+	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
 		return err
 	}
 
-	// 等待selector元素加载完成，使用单独的上下文
+	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
+	defer waitCancel()
 	return chromedp.Run(waitCtx, chromedp.WaitVisible(selector))
 }
 
@@ -142,6 +139,42 @@ func GetHtmlBySelector(ctx context.Context, selector string) (string, error) {
 		return "", err
 	}
 	return html, nil
+}
+
+// GetHtmlBySelectors 按逗号拆分 selector，逐个尝试（与截图逻辑一致）。
+// 优先返回包含价格节点的片段，避免 document 里空的 #CenterPanel 抢先命中。
+func GetHtmlBySelectors(ctx context.Context, selectors string) (string, error) {
+	var (
+		fallback string
+		lastErr  error
+	)
+	for _, sel := range strings.Split(selectors, ",") {
+		sel = strings.TrimSpace(sel)
+		if sel == "" {
+			continue
+		}
+		html, err := GetHtmlBySelector(ctx, sel)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if strings.TrimSpace(html) == "" {
+			continue
+		}
+		if strings.Contains(html, "x-price-primary") || strings.Contains(html, "x-price-approx") {
+			return html, nil
+		}
+		if fallback == "" {
+			fallback = html
+		}
+	}
+	if fallback != "" {
+		return fallback, nil
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("no html from selectors: %s", selectors)
 }
 
 // GetElementBottomRightHeight 获取元素底部距离页面顶部的高度

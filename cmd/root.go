@@ -18,8 +18,8 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "etarantula",
-	Short: "通过Amazon 商品详情页面获取商品信息截图",
-	Long:  `执行命令将启动Rabbit 客户端通过监听指定消息队列来获取品类信息的查询请求. 例如：`,
+	Short: "通过 eBay 商品详情页面获取商品信息截图",
+	Long:  `执行命令将启动 Rabbit 客户端，监听指定消息队列以获取 eBay 品类信息查询请求。Amazon 功能已迁移至其他项目，本工程不再支持。`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
@@ -50,7 +50,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".tarantula.yaml", "config file (default is $HOME/.tarantula.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "config.yaml", "config file (default is $HOME/configyaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

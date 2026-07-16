@@ -20,25 +20,11 @@ func consumeHandler(msg string) {
 	log.Println("收到MQ消息：", msg)
 
 	start := time.Now()
-	var category models.CategoryInfoRequest
-	// 将 JSON 字符串转换为 Go 类型的实例
-	// 先尝试直接解析，如果失败则尝试处理转义的 JSON 字符串
-	err := json.Unmarshal([]byte(msg), &category)
+	category, err := parseConsumeMessage(msg)
 	if err != nil {
-		log.Println("Warning: unmarshalling message, include double quotes, try to process escaped JSON string, err: ", err, "msg: ", msg)
-		// 尝试处理包含转义符的 JSON 字符串（双重编码的情况）
-		var jsonStr string
-		if err2 := json.Unmarshal([]byte(msg), &jsonStr); err2 == nil && jsonStr != "" {
-			// 如果成功解析为字符串，再解析这个字符串
-			err = json.Unmarshal([]byte(jsonStr), &category)
-		}
-	}
-	if err != nil || category.Country == "" || category.ProductNo == "" {
 		fmt.Println("Error unmarshalling message, err: ", err, category)
 		return
 	}
-	// 转换为大写
-	category.Country = strings.ToUpper(category.Country)
 
 	s := service.NewCategoryService(category)
 	if s == nil {
@@ -63,7 +49,7 @@ func consumeHandler(msg string) {
 
 	start = time.Now()
 	// publish category info to MQ
-	err = publishInfo(info)
+	err = publishInfoFn(info)
 	if err != nil {
 		log.Println("回传截图信息，失败, err: ", err)
 		return
@@ -71,6 +57,30 @@ func consumeHandler(msg string) {
 	end = time.Now()
 	log.Println("回传截图信息总耗时:", end.Sub(start))
 
+}
+
+// publishInfoFn 供单元测试替换，避免回传 MQ。
+var publishInfoFn = publishInfo
+
+// parseConsumeMessage 解析 MQ 消息体。
+func parseConsumeMessage(msg string) (models.CategoryInfoRequest, error) {
+	var category models.CategoryInfoRequest
+	err := json.Unmarshal([]byte(msg), &category)
+	if err != nil {
+		log.Println("Warning: unmarshalling message, include double quotes, try to process escaped JSON string, err: ", err, "msg: ", msg)
+		var jsonStr string
+		if err2 := json.Unmarshal([]byte(msg), &jsonStr); err2 == nil && jsonStr != "" {
+			err = json.Unmarshal([]byte(jsonStr), &category)
+		}
+	}
+	if err != nil {
+		return category, err
+	}
+	if category.Country == "" || category.ProductNo == "" {
+		return category, fmt.Errorf("missing country or asin")
+	}
+	category.Country = strings.ToUpper(category.Country)
+	return category, nil
 }
 
 // publishInfo 发布回传信息到MQ

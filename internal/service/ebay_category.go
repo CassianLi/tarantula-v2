@@ -9,7 +9,6 @@ import (
 	"etarantula/internal/utils"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -50,8 +49,8 @@ func (ebay *EbayCategory) GetCategoryInfo() (info models.CategoryInfo, err error
 	}
 
 	// 获取web link
-	url := viper.GetString("ebay.url")
-	url = strings.ReplaceAll(url, "ASIN", ebay.Category.ProductNo)
+	url := buildEbayItemURL(ebay.Category.Country, ebay.Category.ProductNo)
+	log.Println("ebay item url:", url)
 	end := time.Now()
 	log.Println("1. 获取weblink耗时：", end.Sub(start))
 
@@ -122,6 +121,7 @@ func (ebay *EbayCategory) initCategoryInfo(category models.CategoryInfoRequest) 
 		Country:      category.Country,
 		SalesChannel: category.SalesChannel,
 		PriceNo:      category.PriceNo,
+		PriceId:      category.PriceId,
 		Price:        category.Price,
 	}
 }
@@ -139,35 +139,12 @@ func (ebay *EbayCategory) createContext() (ctx context.Context, cancel context.C
 // 下载html页面
 func (ebay *EbayCategory) downloadHtml(ctx context.Context) (html string, err error) {
 	contentSel := viper.GetString("ebay.content-selector")
-
-	// 获取html
-	//html, err = utils.GetHtml(ctx)
-	html, err = utils.GetHtmlBySelector(ctx, contentSel)
+	html, err = utils.GetHtmlBySelectors(ctx, contentSel)
 	if err != nil {
 		log.Println("get html error: ", err)
 		return html, err
 	}
-
 	return html, err
-}
-
-// 判断当前是否是非欧元售价，如果是非欧元售价获取Ca. 欧元对应售价
-func (ebay *EbayCategory) getEurPrice(doc *goquery.Document, text string) string {
-	// 判断是否是欧元售价
-	if strings.Contains(text, "EUR") || strings.Contains(text, "€") {
-		return text
-	}
-
-	// 获取Ca. 补充售价
-	ps := viper.GetString("ebay.price-approx-selector")
-	fmt.Println("price-approx-selector: ", ps)
-	ele := doc.Find(ps)
-	if ele.Nodes != nil {
-		fmt.Println("match selector: ", ps)
-		return ele.Text()
-	}
-	fmt.Println("price-approx-selector not match, return old price not-eur: ", ps)
-	return strings.ReplaceAll(text, "Ca.", "")
 }
 
 // 解析html页面，获取产品信息
@@ -182,37 +159,50 @@ func (ebay *EbayCategory) parseProductInfo(html string, info *models.CategoryInf
 
 	var text string
 	for _, selector := range priceSelectorsArr {
+		selector = strings.TrimSpace(selector)
+		if selector == "" {
+			continue
+		}
 		log.Println("range selector: ", selector)
 		ele := doc.Find(selector)
-		if ele.Nodes != nil {
-			log.Println("match selector: ", selector)
-			text = ele.Text()
-			break
+		if ele.Length() == 0 {
+			continue
 		}
+		text = strings.TrimSpace(ele.First().Text())
+		if text == "" {
+			continue
+		}
+		log.Println("match selector: ", selector)
+		break
 	}
-	fmt.Println("old price text: ", text)
+	fmt.Println("listing price text: ", text)
 
-	text = ebay.getEurPrice(doc, text)
-	fmt.Println("Ca. price text: ", text)
-
-	text = strings.Trim(text, " \n\t")
-
-	// 欧洲数字千分符写法：1.459,19
-	if strings.Contains(text, ".") {
-		text = strings.ReplaceAll(text, ".", "")
+	info.Currency = utils.ExtractPriceCurrencyFromHTML(doc)
+	if info.Currency == "" {
+		info.Currency = utils.CurrencyFromPriceText(text)
 	}
-	text = strings.ReplaceAll(text, ",", ".")
 
-	//numbers := utils.GetFloat64sFromString(text)
-	numbers := utils.GetPriceFromString(text, "EUR")
-
-	if len(numbers) > 0 {
-		// float64转string
-		info.NewPrice = strconv.FormatFloat(numbers[0], 'f', -1, 64)
-	} else {
+	price, err := utils.ParseLocalizedPrice(text)
+	if err != nil {
 		log.Println("解析价格失败", err)
 		return errors.New("解析价格失败, text: " + text)
 	}
+	info.NewPrice = strconv.FormatFloat(price, 'f', -1, 64)
+
+	// 非本地货币标价时，eBay 会展示当地货币近似价（如 PL 站 Około 215,11 zł）
+	approxSel := strings.TrimSpace(viper.GetString("ebay.price-approx-selector"))
+	if approxSel != "" {
+		if approxText := strings.TrimSpace(doc.Find(approxSel).First().Text()); approxText != "" {
+			if localCur := utils.CurrencyFromPriceText(approxText); localCur != "" && localCur != info.Currency {
+				if localPrice, err := utils.ParseLocalizedPrice(approxText); err == nil {
+					info.LocalCurrency = localCur
+					info.LocalPrice = strconv.FormatFloat(localPrice, 'f', -1, 64)
+					fmt.Println("local approx price:", info.LocalPrice, info.LocalCurrency)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -274,15 +264,12 @@ func (ebay *EbayCategory) saveScreenshot(ctx context.Context) (filename string, 
 	country := ebay.Category.Country
 	productNo := ebay.Category.ProductNo
 
-	// 保存到OSS
-	filename = "EBAY_O_" + country + "_" + productNo + "_" + time.Now().Format("060102150105") + ".png"
-
-	if viper.GetBool("save-screenshot-on-disk") {
-		err := os.WriteFile(filename, bytes, 0644)
-		if err != nil {
-			fmt.Println("开启调试模式，保存截图到磁盘失败，文件名：", filename, err)
-		}
+	name := "EBAY_O_" + country + "_" + productNo + "_" + time.Now().Format("060102150105") + ".png"
+	if err := utils.SaveScreenshotLocal(name, bytes); err != nil {
+		fmt.Println("保存截图到磁盘失败，文件名：", name, err)
 	}
+
+	filename = utils.OSSObjectKey(name)
 
 	log.Println("开始上传截图到OSS...")
 	start := time.Now()
@@ -303,4 +290,26 @@ func (ebay *EbayCategory) saveScreenshot(ctx context.Context) (filename string, 
 	log.Println("---- 5.2 上传截图到OSS耗时：", end.Sub(start))
 
 	return filename, err
+}
+
+// buildEbayItemURL 按国家代码生成 eBay 商品页链接。
+func buildEbayItemURL(country, productNo string) string {
+	country = strings.ToLower(strings.TrimSpace(country))
+	if u := viper.GetString("ebay.urls." + country); u != "" {
+		return strings.ReplaceAll(u, "ASIN", productNo)
+	}
+	return "https://www.ebay." + ebayTLD(country) + "/itm/" + productNo
+}
+
+func ebayTLD(country string) string {
+	switch strings.ToUpper(strings.TrimSpace(country)) {
+	case "GB", "UK":
+		return "co.uk"
+	case "US":
+		return "com"
+	case "AU":
+		return "com.au"
+	default:
+		return strings.ToLower(country)
+	}
 }

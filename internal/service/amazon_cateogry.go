@@ -1,6 +1,4 @@
-// Deprecated: This file is deprecated since 2024-03-04 as per README.md.
-// Amazon product information fetching functionality has been removed from this project.
-// Only eBay product information fetching and product screenshot uploading to OSS remain.
+// Deprecated: Amazon 功能已迁移至其他项目，本文件保留仅供参考，不再被调用。
 
 package service
 
@@ -13,7 +11,6 @@ import (
 	"etarantula/internal/utils"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +26,7 @@ const (
 	ScreenshotError = "SCREENSHOT_ERROR"
 )
 
+// Deprecated: Amazon 功能已迁移至其他项目，不再使用。
 type AmazonCategory struct {
 	// Category 请求参数
 	Category models.CategoryInfoRequest
@@ -126,6 +124,7 @@ func (amazon *AmazonCategory) initCategoryInfo(category models.CategoryInfoReque
 		Country:      category.Country,
 		SalesChannel: category.SalesChannel,
 		PriceNo:      category.PriceNo,
+		PriceId:      category.PriceId,
 		Price:        category.Price,
 	}
 }
@@ -184,15 +183,12 @@ func (amazon *AmazonCategory) saveScreenshot(ctx context.Context) (filename stri
 	country := amazon.Category.Country
 	productNo := amazon.Category.ProductNo
 
-	// 保存到OSS
-	filename = "AMAZON_O_" + country + "_" + productNo + "_" + time.Now().Format("060102150105") + ".png"
-
-	if viper.GetBool("save-screenshot-on-disk") {
-		err := os.WriteFile(filename, bytes, 0644)
-		if err != nil {
-			fmt.Println("开启调试模式，保存截图到磁盘失败，文件名：", filename, err)
-		}
+	name := "AMAZON_O_" + country + "_" + productNo + "_" + time.Now().Format("060102150105") + ".png"
+	if err := utils.SaveScreenshotLocal(name, bytes); err != nil {
+		fmt.Println("保存截图到磁盘失败，文件名：", name, err)
 	}
+
+	filename = utils.OSSObjectKey(name)
 
 	log.Println("开始上传截图到OSS...")
 	start = time.Now()

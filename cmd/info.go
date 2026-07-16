@@ -18,8 +18,8 @@ var channel, productNo, country string
 var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "请求品类信息",
-	Long: `通过命令行获取品类信息，例如：
-etarantula info --config .tarantula.yaml --product BXXXX2341 --country de --channel amazon`,
+	Long: `通过命令行获取 eBay 品类信息，例如：
+etarantula info --config .tarantula.yaml --product 123456789 --country de --channel ebay`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		log.Println("info called")
@@ -60,7 +60,7 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	infoCmd.PersistentFlags().StringVar(&channel, "channel", "amazon", "Sales channel,default=amazon")
+	infoCmd.PersistentFlags().StringVar(&channel, "channel", "ebay", "Sales channel (amazon 已弃用，请使用 ebay)")
 	infoCmd.PersistentFlags().StringVar(&country, "country", "de", "country code,default=de")
 	infoCmd.PersistentFlags().StringVar(&productNo, "product", "", "product number")
 
