@@ -132,7 +132,7 @@ func (ebay *EbayCategory) createContext() (ctx context.Context, cancel context.C
 		return config.BrowserContext, nil, nil
 	} else {
 		// 创建一个chrome实例
-		return utils.CreateBrowserContext(viper.GetString("chromedp.url"), viper.GetBool("chrome.headless"))
+		return utils.CreateBrowserContext(viper.GetString("chromedp.url"), viper.GetBool("chromedp.headless"))
 	}
 }
 
