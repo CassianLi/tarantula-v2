@@ -28,43 +28,27 @@ func GetUserAgent() string {
 	return userAgents[rand.Intn(len(userAgents))]
 }
 
-// CreateContext create context
-func CreateContext(headless bool, timeout time.Duration) (context.Context, context.CancelFunc) {
-	ctx, cancel := chromedp.NewContext(context.Background())
-
-	// Set timeout for the context
-	ctx, timeoutCancel := context.WithTimeout(ctx, timeout)
-
-	// Set the options for the Chrome browser
-	chromeOpts := []chromedp.ExecAllocatorOption{
-		// Add more options as needed
-	}
-
-	// Add Headless option if needed
-	if headless {
-		chromeOpts = append(chromeOpts, chromedp.Headless)
-	}
-
-	// Create a new context with custom configuration
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, chromeOpts...)
-	ctx, _ = chromedp.NewContext(allocCtx)
-
-	// Return the context and cancel functions
-	return ctx, func() {
-		timeoutCancel()
-		allocCancel()
-		cancel()
-	}
-
-}
-
 // CreateBrowserContext 创建一个chrome实例
-func CreateBrowserContext(debugUrl string) (ctx context.Context, cancel context.CancelFunc, err error) {
-	if debugUrl == "" {
-		debugUrl = "http://localhost:9222"
+func CreateBrowserContext(debugUrl string, headless bool) (ctx context.Context, cancel context.CancelFunc, err error) {
+	if debugUrl != "" {
+		fmt.Println("链接远程浏览器上下文...")
+		if !headless {
+			debugUrl = debugUrl + "?headless=false"
+		}
+		//创建一个chrome实例
+		ctx, cancel = chromedp.NewRemoteAllocator(context.Background(), debugUrl)
+	} else {
+		// 创建一个自定义的 Chrome 启动选项
+		fmt.Println("创建浏览器上下文...")
+		opts := append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("start-maximized", true), // 最大化窗口
+			chromedp.Flag("headless", headless),
+			chromedp.Flag("hide-scrollbars", headless),
+			chromedp.Flag("mute-audio", headless),
+			chromedp.Flag("disable-gpu", headless),
+		)
+		ctx, _ = chromedp.NewExecAllocator(context.Background(), opts...)
 	}
-	// 创建一个chrome实例
-	ctx, cancel = chromedp.NewRemoteAllocator(context.Background(), debugUrl)
 
 	// create a new chrome instance
 	ctx, cancel = chromedp.NewContext(ctx)

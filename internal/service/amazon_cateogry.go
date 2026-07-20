@@ -134,7 +134,7 @@ func (amazon *AmazonCategory) createContext() (ctx context.Context, cancel conte
 		return config.BrowserContext, nil, nil
 	} else {
 		// 创建一个chrome实例
-		return utils.CreateBrowserContext(viper.GetString("chrome.url"))
+		return utils.CreateBrowserContext(viper.GetString("chromedp.url"), viper.GetBool("chromedp.headless"))
 	}
 }
 
