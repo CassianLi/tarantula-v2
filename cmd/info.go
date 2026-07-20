@@ -24,7 +24,7 @@ etarantula info --config .tarantula.yaml --product 123456789 --country de --chan
 
 		log.Println("info called")
 		// 初始化配置
-		err := config.InitBrowserContext("")
+		err := config.InitBrowserContext()
 		if err != nil {
 			log.Println("Init browser context failed, err:", err)
 			return

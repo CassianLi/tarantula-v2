@@ -67,6 +67,7 @@ mq:
     exchange:
     exchange-type: direct
 
+# Chrome 远程调试地址；空则本地拉起 Chrome（仅非全局上下文路径）
 chromedp:
-  url:
+  url: ws://localhost:9222
   headless: false

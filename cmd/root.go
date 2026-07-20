@@ -87,9 +87,9 @@ func initGlobalVariables() {
 	config.GlobalContext = viper.GetBool("global-context")
 	if config.GlobalContext {
 		fmt.Println("启用全局浏览器上下文，将不会在每次请求时重新创建浏览器上下文，请求结束后也不会关闭浏览器上下文。")
-		err := config.InitBrowserContext("")
+		err := config.InitBrowserContext()
 		if err != nil {
-			fmt.Println("初始化浏览器上下文失败，请检查浏览器远程端口是否打开...", err)
+			fmt.Println("初始化浏览器上下文失败，请检查 chromedp.url 配置及浏览器远程调试端口...", err)
 			return
 		}
 	}

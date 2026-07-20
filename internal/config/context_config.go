@@ -3,11 +3,10 @@ package config
 import (
 	"context"
 	"fmt"
-	"github.com/chromedp/chromedp"
-)
 
-const (
-	ChromeRemoteDebuggingUrl = "http://localhost:9222"
+	"etarantula/internal/utils"
+
+	"github.com/spf13/viper"
 )
 
 var (
@@ -20,17 +19,16 @@ var (
 	BrowserCancel context.CancelFunc
 )
 
-// InitBrowserContext 初始化浏览器上下文
-func InitBrowserContext(debugUrl string) error {
-	if debugUrl == "" {
-		debugUrl = ChromeRemoteDebuggingUrl
-	}
+// InitBrowserContext 从配置 chromedp.url / chromedp.headless 初始化浏览器上下文
+func InitBrowserContext() error {
 	fmt.Println("初始化浏览器上下文...")
-	// 创建一个chrome实例
-	BrowserContext, BrowserCancel = chromedp.NewRemoteAllocator(context.Background(), debugUrl)
-
-	// create a new chrome instance
-	BrowserContext, BrowserCancel = chromedp.NewContext(BrowserContext)
-
+	var err error
+	BrowserContext, BrowserCancel, err = utils.CreateBrowserContext(
+		viper.GetString("chromedp.url"),
+		viper.GetBool("chromedp.headless"),
+	)
+	if err != nil {
+		return err
+	}
 	return BrowserContext.Err()
 }
