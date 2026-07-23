@@ -24,7 +24,10 @@ var rootCmd = &cobra.Command{
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		// 初始化配置
-		initGlobalVariables()
+		if err := initGlobalVariables(); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 
 		// 启动消费者
 		rabbitmq.Consuming()
@@ -82,15 +85,14 @@ func initConfig() {
 }
 
 // 初始化全局变量
-func initGlobalVariables() {
+func initGlobalVariables() error {
 	// 是否启用全局浏览器上下文
 	config.GlobalContext = viper.GetBool("global-context")
 	if config.GlobalContext {
 		fmt.Println("启用全局浏览器上下文，将不会在每次请求时重新创建浏览器上下文，请求结束后也不会关闭浏览器上下文。")
-		err := config.InitBrowserContext()
-		if err != nil {
-			fmt.Println("初始化浏览器上下文失败，请检查 chromedp.url 配置及浏览器远程调试端口...", err)
-			return
+		if err := config.InitBrowserContext(); err != nil {
+			return fmt.Errorf("初始化浏览器上下文失败，请检查 chromedp.url 及远程调试端口: %w", err)
 		}
 	}
+	return nil
 }

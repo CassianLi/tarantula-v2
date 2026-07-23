@@ -67,6 +67,12 @@ func (ebay *EbayCategory) NewCategoryService(cat models.CategoryInfoRequest) Cat
 
 // GetCategoryInfo Get the information about category
 func (ebay *EbayCategory) GetCategoryInfo() (info models.CategoryInfo, err error) {
+	// 全局浏览器必须串行：MQ 重连可能叠两个消费者，并发 Run 会 panic close of closed channel。
+	if config.GlobalContext {
+		config.BrowserMu.Lock()
+		defer config.BrowserMu.Unlock()
+	}
+
 	start := time.Now()
 	info = ebay.initCategoryInfo(ebay.Category)
 	// 创建一个chrome实例
@@ -193,11 +199,15 @@ func (ebay *EbayCategory) initCategoryInfo(category models.CategoryInfoRequest) 
 // 创建一个chrome实例
 func (ebay *EbayCategory) createContext() (ctx context.Context, cancel context.CancelFunc, err error) {
 	if config.GlobalContext {
+		if config.BrowserContext == nil {
+			return nil, nil, errors.New("全局浏览器上下文未初始化")
+		}
+		if err := config.BrowserContext.Err(); err != nil {
+			return nil, nil, fmt.Errorf("全局浏览器上下文已失效: %w", err)
+		}
 		return config.BrowserContext, nil, nil
-	} else {
-		// 创建一个chrome实例
-		return utils.CreateBrowserContext(viper.GetString("chromedp.url"), viper.GetBool("chromedp.headless"))
 	}
+	return utils.CreateBrowserContext(viper.GetString("chromedp.url"), viper.GetBool("chromedp.headless"))
 }
 
 // 下载html页面

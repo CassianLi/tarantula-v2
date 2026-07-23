@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -16,6 +17,12 @@ import (
 
 // consumeHandler 消息处理函数
 func consumeHandler(msg string) {
+	// chromedp 内部 goroutine panic 仍会杀进程；这里兜底业务层 panic，避免拖垮消费者循环。
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("consumeHandler panic recovered: %v\n%s", r, debug.Stack())
+		}
+	}()
 
 	log.Println("收到MQ消息：", msg)
 
@@ -100,6 +107,9 @@ func publishInfo(info models.CategoryInfo) error {
 	if err != nil {
 		fmt.Println("创建消息回传MQ链接失败，Error: ", err)
 		return err
+	}
+	if mq == nil {
+		return fmt.Errorf("publish mq is nil")
 	}
 	defer mq.Close()
 

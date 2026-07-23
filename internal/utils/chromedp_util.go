@@ -28,32 +28,37 @@ func GetUserAgent() string {
 	return userAgents[rand.Intn(len(userAgents))]
 }
 
-// CreateBrowserContext 创建一个chrome实例
+// CreateBrowserContext 创建一个chrome实例，并立即分配浏览器（避免首次并发 Run 触发 chromedp panic）。
 func CreateBrowserContext(debugUrl string, headless bool) (ctx context.Context, cancel context.CancelFunc, err error) {
+	var allocCancel context.CancelFunc
 	if debugUrl != "" {
 		fmt.Println("链接远程浏览器上下文...")
-		if !headless {
-			debugUrl = debugUrl + "?headless=false"
-		}
-		//创建一个chrome实例
-		ctx, cancel = chromedp.NewRemoteAllocator(context.Background(), debugUrl)
+		// headless 仅对本地 ExecAllocator 有效；不要拼到远程 ws URL，否则 /json/version 探测会失败。
+		ctx, allocCancel = chromedp.NewRemoteAllocator(context.Background(), debugUrl)
 	} else {
-		// 创建一个自定义的 Chrome 启动选项
 		fmt.Println("创建浏览器上下文...")
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.Flag("start-maximized", true), // 最大化窗口
+			chromedp.Flag("start-maximized", true),
 			chromedp.Flag("headless", headless),
 			chromedp.Flag("hide-scrollbars", headless),
 			chromedp.Flag("mute-audio", headless),
 			chromedp.Flag("disable-gpu", headless),
 		)
-		ctx, _ = chromedp.NewExecAllocator(context.Background(), opts...)
+		ctx, allocCancel = chromedp.NewExecAllocator(context.Background(), opts...)
 	}
 
-	// create a new chrome instance
-	ctx, cancel = chromedp.NewContext(ctx)
+	ctx, browserCancel := chromedp.NewContext(ctx)
+	cancel = func() {
+		browserCancel()
+		allocCancel()
+	}
 
-	return ctx, cancel, ctx.Err()
+	// 首次 Run 会分配浏览器；启动时做掉，避免 MQ 重连叠消费时并发 Allocate panic。
+	if err = chromedp.Run(ctx); err != nil {
+		cancel()
+		return nil, nil, fmt.Errorf("allocate browser: %w", err)
+	}
+	return ctx, cancel, nil
 }
 
 // Navigate 打开链接

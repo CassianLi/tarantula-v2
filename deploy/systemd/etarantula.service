@@ -1,0 +1,23 @@
+[Unit]
+Description=etarantula eBay screenshot worker
+After=network.target chrome-debug.service
+# 启动/重启 etarantula 时一并拉起 Chrome；Chrome 挂了也会导致本服务失败（便于发现）
+Requires=chrome-debug.service
+
+[Service]
+Type=simple
+User=tarantula
+Group=tarantula
+WorkingDirectory=/opt/etarantula
+Environment=HOME=/opt/etarantula
+
+# 等 9222 就绪再启动（最多约 30s）
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do curl -sf http://127.0.0.1:9222/json/version >/dev/null && exit 0; sleep 1; done; echo "chrome 9222 not ready"; exit 1'
+
+ExecStart=/opt/etarantula/etarantula --config /opt/etarantula/.tarantula-ebay.yaml
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

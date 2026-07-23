@@ -1,0 +1,33 @@
+[Unit]
+Description=Chrome remote debugging for etarantula (port 9222)
+After=network.target
+# 有图形桌面时，等显示管理器起来再启（无桌面可删掉这行）
+After=display-manager.service
+
+[Service]
+Type=simple
+User=tarantula
+Group=tarantula
+# 桌面环境：按实际显示号调整；纯无头服务器可改为不设 DISPLAY，并在 ExecStart 加 --headless=new
+Environment=DISPLAY=:0
+Environment=HOME=/opt/etarantula
+WorkingDirectory=/opt/etarantula
+
+# 独立配置目录，避免和日常 Chrome 抢同一实例导致 9222 不生效
+ExecStartPre=/bin/mkdir -p /opt/etarantula/chrome-debug
+ExecStart=/usr/bin/google-chrome-stable \
+	--remote-debugging-port=9222 \
+	--remote-debugging-address=127.0.0.1 \
+	--user-data-dir=/opt/etarantula/chrome-debug \
+	--no-first-run \
+	--no-default-browser-check \
+	--disable-background-networking \
+	about:blank
+
+Restart=on-failure
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
