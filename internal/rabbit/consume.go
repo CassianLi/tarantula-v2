@@ -96,7 +96,7 @@ func publishInfo(info models.CategoryInfo) error {
 		viper.GetString("mq.publish.exchange"),
 		viper.GetString("mq.publish.exchange-type"),
 		viper.GetString("mq.publish.queue"),
-		false)
+		true)
 	if err != nil {
 		fmt.Println("创建消息回传MQ链接失败，Error: ", err)
 		return err

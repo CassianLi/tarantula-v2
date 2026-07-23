@@ -17,12 +17,45 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ErrProductNotFound 商品页不存在或已下架。
+var ErrProductNotFound = errors.New("商品信息不存在")
+
 type EbayCategory struct {
 	// Category 请求参数
 	Category models.CategoryInfoRequest
 
 	// Errors returned error messages
 	Errors []string
+}
+
+// ebayItemMissing 判断页面是否为商品不存在/已下架/站点错误页。
+func ebayItemMissing(html string) bool {
+	lower := strings.ToLower(html)
+	markers := []string{
+		"error page | ebay",
+		"id=\"error-info\"",
+		"something went wrong on our end",
+		"dieses angebot ist nicht mehr verfügbar",
+		"this listing was ended",
+		"this listing has been removed",
+		"the item is no longer available",
+		"hubo un problema",
+		"cet objet n'est plus disponible",
+		"questo oggetto non è più disponibile",
+	}
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// getPageHTML 带超时取整页，避免错误路径上 GetHtml 再拖死消费。
+func getPageHTML(ctx context.Context) (string, error) {
+	htmlCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return utils.GetHtml(htmlCtx)
 }
 
 // NewCategoryService 创建service
@@ -65,6 +98,12 @@ func (ebay *EbayCategory) GetCategoryInfo() (info models.CategoryInfo, err error
 	err = utils.NavigateAndWait(ctx, url, viper.GetString("ebay.content-selector"), 10*time.Second)
 	if err != nil {
 		log.Println("页面超时", err)
+		// 商品不存在/错误页可能没有 content-selector；取整页 HTML 判断，避免一直卡在截图等待。
+		if pageHTML, htmlErr := getPageHTML(ctx); htmlErr == nil && ebayItemMissing(pageHTML) {
+			info.Status = PageError
+			info.Errors = append(info.Errors, ErrProductNotFound.Error())
+			return info, ErrProductNotFound
+		}
 		info.Status = PageError
 		info.Errors = append(info.Errors, "页面超时")
 		return info, err
@@ -73,10 +112,24 @@ func (ebay *EbayCategory) GetCategoryInfo() (info models.CategoryInfo, err error
 	end = time.Now()
 	log.Println("2. 打开weblink耗时：", end.Sub(start))
 
+	// 打开成功后先快速判断错误/下架页，避免后续 selector 轮询拖死消费。
+	if pageHTML, htmlErr := getPageHTML(ctx); htmlErr == nil && ebayItemMissing(pageHTML) {
+		info.Status = PageError
+		info.Errors = append(info.Errors, ErrProductNotFound.Error())
+		return info, ErrProductNotFound
+	}
+
 	// 下载html
 	start = time.Now()
+	log.Println("3. 开始下载html...")
 	html, err := ebay.downloadHtml(ctx)
 	if err != nil {
+		// 内容区选择器未命中时，再取整页判断是否为「商品不存在」页，避免误报超时并堵住 MQ。
+		if pageHTML, htmlErr := getPageHTML(ctx); htmlErr == nil && ebayItemMissing(pageHTML) {
+			info.Status = PageError
+			info.Errors = append(info.Errors, ErrProductNotFound.Error())
+			return info, ErrProductNotFound
+		}
 		info.Status = PriceError
 		info.Errors = append(info.Errors, "下载html失败")
 		return info, err
@@ -85,12 +138,23 @@ func (ebay *EbayCategory) GetCategoryInfo() (info models.CategoryInfo, err error
 
 	log.Println("3. 下载html耗时：", end.Sub(start))
 
+	if ebayItemMissing(html) {
+		info.Status = PageError
+		info.Errors = append(info.Errors, ErrProductNotFound.Error())
+		return info, ErrProductNotFound
+	}
+
 	start = time.Now()
 	// 解析html
 	err = ebay.parseProductInfo(html, &info)
 	if err != nil {
 		info.Status = PriceError
+		if errors.Is(err, ErrProductNotFound) {
+			info.Status = PageError
+		}
 		info.Errors = append(info.Errors, err.Error())
+		// 解析失败时不再截图：商品区 selector 可能永不出现，chromedp 无超时会永久阻塞消费。
+		return info, err
 	}
 	end = time.Now()
 	log.Println("4. 解析Price耗时：", end.Sub(start))
@@ -176,6 +240,10 @@ func (ebay *EbayCategory) parseProductInfo(html string, info *models.CategoryInf
 		break
 	}
 	fmt.Println("listing price text: ", text)
+
+	if text == "" {
+		return ErrProductNotFound
+	}
 
 	info.Currency = utils.ExtractPriceCurrencyFromHTML(doc)
 	if info.Currency == "" {

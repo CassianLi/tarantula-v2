@@ -95,10 +95,13 @@ func GetScreenshot(ctx context.Context, height int64) ([]byte, error) {
 	return buf, nil
 }
 
-// GetScreenshotBySelector chromedp 获取指定选择器的截图，并返回base64编码
+// GetScreenshotBySelector chromedp 获取指定选择器的截图，并返回base64编码。
+// 带超时：NodeVisible 在元素永不出现时会一直等，拖死 MQ 消费。
 func GetScreenshotBySelector(ctx context.Context, selector string) ([]byte, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
 	var buf []byte
-	err := chromedp.Run(ctx, chromedp.Screenshot(selector, &buf, chromedp.NodeVisible))
+	err := chromedp.Run(waitCtx, chromedp.Screenshot(selector, &buf, chromedp.NodeVisible))
 	if err != nil {
 		return nil, err
 	}
@@ -107,18 +110,23 @@ func GetScreenshotBySelector(ctx context.Context, selector string) ([]byte, erro
 
 // GetHtml chromedp 获取当前页面html
 func GetHtml(ctx context.Context) (string, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
 	var html string
-	err := chromedp.Run(ctx, chromedp.OuterHTML("html", &html))
+	err := chromedp.Run(waitCtx, chromedp.OuterHTML("html", &html))
 	if err != nil {
 		return "", err
 	}
 	return html, nil
 }
 
-// GetHtmlBySelector chromedp 获取指定选择器的html
+// GetHtmlBySelector chromedp 获取指定选择器的html。
+// 带超时：元素不存在时 OuterHTML 会一直等，拖死 MQ。
 func GetHtmlBySelector(ctx context.Context, selector string) (string, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	var html string
-	err := chromedp.Run(ctx, chromedp.OuterHTML(selector, &html))
+	err := chromedp.Run(waitCtx, chromedp.OuterHTML(selector, &html))
 	if err != nil {
 		return "", err
 	}
@@ -127,6 +135,7 @@ func GetHtmlBySelector(ctx context.Context, selector string) (string, error) {
 
 // GetHtmlBySelectors 按逗号拆分 selector，逐个尝试（与截图逻辑一致）。
 // 优先返回包含价格节点的片段，避免 document 里空的 #CenterPanel 抢先命中。
+// 已有无价格 fallback 时，后续 selector 用更短超时，避免商品不存在页卡死在次要节点上。
 func GetHtmlBySelectors(ctx context.Context, selectors string) (string, error) {
 	var (
 		fallback string
@@ -137,7 +146,13 @@ func GetHtmlBySelectors(ctx context.Context, selectors string) (string, error) {
 		if sel == "" {
 			continue
 		}
-		html, err := GetHtmlBySelector(ctx, sel)
+		runCtx := ctx
+		cancel := func() {}
+		if fallback != "" {
+			runCtx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		}
+		html, err := GetHtmlBySelector(runCtx, sel)
+		cancel()
 		if err != nil {
 			lastErr = err
 			continue
